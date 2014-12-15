@@ -1,6 +1,6 @@
 MShell (модуль требует наличия модуля _PDO (https://github.com/avtomon/_PDO)
 ====
-Описание методов
+#Описание методов
 ##Класс class.mshell.php
 ####create
 `public static function create ($hostorsock = 'unix:///tmp/memcached.sock', $dbdriver = 'pgsql', $port = 0, $ttl = 300, $tag_ttl = 120, $delay = 10000, $solt = false)`   
