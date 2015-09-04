@@ -1,37 +1,31 @@
 ﻿<?php
 
- 
-//ini_set('display_errors', 1);
-//error_reporting(E_ALL);
-
-//namespace CMS\Storage;
-
 class MShellException extends Exception { }
 
 class MShell
 {
-    private $dbconnect;
-    private $ttl;
-    private $tag_ttl;
-    private $lock_value;
-    private $delay;
-    private $solt;
-    private $mc;
+    private $dbconnect; // Подключение в БД
+    private $ttl; // Время жизни элемента кэша
+    private $tag_ttl; // Время жизни тега
+    private $lock_value; // Значение заблокированного элемента кэша
+    private $delay; // Задержка между последовательными попытками записи в кэш
+    private $solt; // Соль, использующаяся при формировании имени ключа элемента кэша
+    private $mc; // Подключение к Memcached
 
     private static $instance = false;
 
     /**
      * Синглтон для получения объекта управления memcached
      *
-     * @param string $hostorsock
-     * @param string $dbdriver
-     * @param int $port
-     * @param int $ttl
-     * @param int $tag_ttl
-     * @param int $delay
-     * @param bool $solt
+     * @param string $hostorsock - сокет или хост для подключения в Memcached
+     * @param int $port - Порт для подключения
+     * @param int $ttl - Время жизни элемента кэша
+     * @param int $tag_ttl - Время жизни тега
+     * @param int $delay - Задержка между последовательными попытками записи в кэш
+     * @param bool $solt - Соль, использующаяся при формировании имени ключа элемента кэша
+     *
      * @return bool|MShell
-     * @throws Exception
+     * @throws MShellException
      */
     public static function create ($hostorsock = MEMCACHED_SOCKET, $port = MEMCACHED_PORT, $ttl = MEMCACHED_TTL, $tag_ttl = MEMCACHED_TAG_TTL, $delay = MEMCACHED_DELAY, $solt = MEMCACHED_SOLT)
     {
@@ -42,7 +36,7 @@ class MShell
             $mc = new Memcache;
             if ($connect = $mc->connect($hostorsock, $port))
             {
-                self::$instance = new MShell ($mc, $ttl, $tag_ttl, $lock_value = "906a58a0aac5281e89718496686bb322", $delay, $solt, $dbconnect);
+                self::$instance = new MShell ($mc, $ttl, $tag_ttl, $lock_value = MEMCACHED_LOCK_VALUE, $delay, $solt, $dbconnect);
             }
             else
             {
@@ -86,7 +80,8 @@ class MShell
     /**
      * Функция получения ключа элемента кэша
      *
-     * @param $query
+     * @param $query - текст запроса
+     *
      * @return string
      * @throws Exception
      */
@@ -102,16 +97,31 @@ class MShell
         }
     }
 
+    /**
+     * Начать транзакцию
+     *
+     * @return mixed
+     */
     public function beginTransaction ()
     {
         return $this->dbconnect->beginTransaction();
     }
 
+    /**
+     * Зафиксировать транзакцию
+     *
+     * @return mixed
+     */
     public function commit ()
     {
         return $this->dbconnect->commit();
     }
 
+    /**
+     * Откатить транзакцию
+     *
+     * @return mixed
+     */
     public function rollBack ()
     {
         return $this->dbconnect->rollBack();
@@ -120,9 +130,10 @@ class MShell
     /**
      * Возвращает данные
      *
-     * @param $query
-     * @param array $params
-     * @param int $expires
+     * @param $query - текст запроса
+     * @param array $params - параментры запроса
+     * @param int $expires - время актуальности кэшированного результата выполнения запроса
+     *
      * @return mixed
      * @throws Exception
      */
@@ -190,6 +201,7 @@ class MShell
      * Инициализация заданного массива тегов
      *
      * @param array $tags - массив тегов
+     *
      * @return bool
      * @throws MShellException
      * @throws Exception
@@ -214,10 +226,11 @@ class MShell
     /**
      * Конкурентное сохранение значение в кэше
      *
-     * @param $key
-     * @param $value
-     * @param $expires
-     * @throws Exception
+     * @param $key - ключ элемента кэша
+     * @param $value - значение для сохрания
+     * @param $expires - время актуальности элемента кэша
+     *
+     * @return bool
      * @throws MShellException
      */
     private function setValue ($key, $value, $expires)
@@ -243,9 +256,10 @@ class MShell
     /**
      * Сохранить разметку страницы в кэше
      *
-     * @param $html
-     * @param $url
-     * @param $expire
+     * @param $html - текст страница
+     * @param $url - адрес страницы
+     * @param $expire - на сколько сохранять
+     *
      * @throws Exception
      */
     public function saveHTML($html, $url, $expire)
@@ -256,7 +270,8 @@ class MShell
     /**
      * Достать разметку страницы из кэша
      *
-     * @param $url
+     * @param $url - адрес запрашиваемой страницы
+     *
      * @throws Exception
      */
     public function getHTML ($url)
@@ -264,6 +279,13 @@ class MShell
         return $this->mc->get(md5($url));
     }
 
+    /**
+     * Удалить страницу из кэша
+     *
+     * @param $url - адрес удаляемой страницы
+     * 
+     * @return mixed
+     */
     public function delHTML ($url)
     {
         return $this->mc->delete(md5($url));
