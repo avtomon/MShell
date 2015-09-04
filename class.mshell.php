@@ -16,7 +16,8 @@ class MShell
     private $lock_value;
     private $delay;
     private $solt;
-    
+    private $mc;
+
     private static $instance = false;
 
     /**
@@ -32,35 +33,28 @@ class MShell
      * @return bool|MShell
      * @throws Exception
      */
-    public static function create ($hostorsock = 'unix:///var/run/memcached.sock', $dbdriver = 'pgsql', $port = 0, $ttl = 300, $tag_ttl = 120, $delay = 10000, $solt = false)
+    public static function create ($hostorsock = MEMCACHED_SOCKET, $port = MEMCACHED_PORT, $ttl = MEMCACHED_TTL, $tag_ttl = MEMCACHED_TAG_TTL, $delay = MEMCACHED_DELAY, $solt = MEMCACHED_SOLT)
     {
-        try
+        if (!self::$instance)
         {
-            if (!self::$instance)
+            $dbconnect = _PDO::create();
+
+            $mc = new Memcache;
+            if ($connect = $mc->connect($hostorsock, $port))
             {
-                $dbconnect = _PDO::create($dbdriver);
-
-                if (file_exists($_SERVER['DOCUMENT_ROOT'].'/confs/memcached.ini') && $init = parse_ini_file($_SERVER['DOCUMENT_ROOT'].'/confs/memcached.ini'))
-                {
-                    extract($init);
-                }
-
-                $mc = new Memcache;
-                if ($connect = $mc->connect($hostorsock, $port))
-                {
-                    self::$instance = new MShell ($mc, $ttl, $tag_ttl, $lock_value = "906a58a0aac5281e89718496686bb322", $delay, $solt, $dbconnect);
-                }
-                else
-                {
-                    throw new MShellException('Подключение не удалось');
-                }
+                self::$instance = new MShell ($mc, $ttl, $tag_ttl, $lock_value = "906a58a0aac5281e89718496686bb322", $delay, $solt, $dbconnect);
             }
-            return self::$instance;
+            else
+            {
+                throw new MShellException('Подключение не удалось');
+            }
         }
-        catch (Exception $e)
-        {
-            throw $e;
-        }
+        return self::$instance;
+    }
+
+    public static function getInstance ()
+    {
+        return self::$instance;
     }
 
     /**
@@ -86,7 +80,7 @@ class MShell
 
     public function __destruct ()
     {
-        $this->mc->close();
+        return $this->mc->close();
     }
 
     /**
@@ -98,59 +92,29 @@ class MShell
      */
     private function getKey ($query)
     {
-       try
-       {
-           if ($query)
-           {
-               $key = md5($query . $this->solt);
-
-               return $key;
-           }
-           else
-           {
-               throw new MShellException('Строка запроса пуста');
-           }
-       }
-       catch (Exception $e)
-       {
-           throw $e;
-       }
+        if ($query)
+        {
+            return md5($query . $this->solt);
+        }
+        else
+        {
+            throw new MShellException('Строка запроса пуста');
+        }
     }
 
     public function beginTransaction ()
     {
-        try
-        {
-            $this->dbconnect->beginTransaction();
-        }
-        catch (Exception $e)
-        {
-            throw $e;
-        }
+        return $this->dbconnect->beginTransaction();
     }
 
     public function commit ()
     {
-        try
-        {
-            $this->dbconnect->commit();
-        }
-        catch (Exception $e)
-        {
-            throw $e;
-        }
+        return $this->dbconnect->commit();
     }
 
     public function rollBack ()
     {
-        try
-        {
-            $this->dbconnect->rollBack();
-        }
-        catch (Exception $e)
-        {
-            throw $e;
-        }
+        return $this->dbconnect->rollBack();
     }
 
     /**
@@ -164,72 +128,61 @@ class MShell
      */
     public function getValue ($query, array $params = array(), $expires = 120)
     {
-        try
+        $tags = $this->dbconnect->getEditTables($query);
+        if ($tags)
         {
-            $key = $this->getKey($query . serialize($params));
-
-            $tags = $this->dbconnect->getEditTables($query);
-            if ($tags)
+            $this->initTags($tags);
+            return $this->dbconnect->query($query, $params);
+        }
+        else
+        {
+            if ($expires)
             {
-                $this->initTags($tags);
-                $tmp = $this->dbconnect->query($query, $params);
-                //print_r($tmp);
-                return $tmp;
-            }
-            else
-            {
-                if ($expires)
+                $key = $this->getKey($query . serialize($params));
+                for ($i = 0; $i < 20; $i++)
                 {
-                    for ($i = 0; $i < 20; $i++)
+                    $value = $this->mc->get($key);
+                    if ($value)
                     {
-                        $value = $this->mc->get($key);
-                        if ($value)
+                        if ($value !== $this->lock_value)
                         {
-                            if ($value !== $this->lock_value)
+                            $value = json_decode($value, true);
+                            if (!isset($value['ttl']) || $value['ttl'] < time())
                             {
-                                $value = json_decode($value, true);
-                                if (!isset($value['ttl']) || $value['ttl'] < time())
+                                goto get;
+                            }
+                            elseif ($tags = $this->dbconnect->getTables($query))
+                            {
+                                foreach ($tags AS $tag)
                                 {
-                                    goto get;
-                                }
-                                elseif ($tags = $this->dbconnect->getTables($query))
-                                {
-                                    foreach ($tags AS $tag)
+                                    if ($this->mc->get($tag) >= $value['ttl'] - $expires)
                                     {
-                                        if ($this->mc->get($tag) >= $value['ttl'] - $expires)
-                                            goto get;
+                                        goto get;
                                     }
-                                    //print_r($value['data']);
-                                    //return $value['data'];
-                                    goto get;
                                 }
-                                else
-                                {
-                                    throw new MShellException('Список таблиц запроса на выборку пуст');
-                                }
+                                return $value['data'];
                             }
                             else
                             {
-                                usleep($this->delay);
+                                throw new MShellException('Список таблиц запроса на выборку пуст');
                             }
                         }
                         else
                         {
-                            get:
-                            $value = $this->dbconnect->query($query, $params);
-                            $this->setValue($key, $value, $expires);
-                            //print_r($value);
-                            return $value;
+                            usleep($this->delay);
                         }
                     }
-                    throw new MShellException('Не удалось установить блокировку');
+                    else
+                    {
+                        get:
+                        $value = $this->dbconnect->query($query, $params);
+                        $this->setValue($key, $value, $expires);
+                        return $value;
+                    }
                 }
-                return $this->dbconnect->query($query, $params);
+                throw new MShellException('Не удалось установить блокировку');
             }
-        }
-		catch (Exception $e)
-        {
-			throw $e;
+            return $this->dbconnect->query($query, $params);
         }
     }
 
@@ -243,26 +196,19 @@ class MShell
      */
     private  function initTags (array $tags = array())
     {
-        try 
-		{
-            if ($tags)
+        if ($tags)
+        {
+            foreach ($tags AS $tag)
             {
-                foreach ($tags AS $tag)
-                {
-                    if (!$this->mc->set($tag, time(), 0, $this->tag_ttl))
-                        throw new MShellException('Не удалось установить значение тега');
-                }
-                return true;
-            } 
-            else 
-            {
-                throw new MShellException('Теги отсутствуют');
+                if (!$this->mc->set($tag, time(), 0, $this->tag_ttl))
+                    throw new MShellException('Не удалось установить значение тега');
             }
+            return true;
         }
-        catch (Exception $e)
-		{
-			throw $e;
-		}
+        else
+        {
+            throw new MShellException('Теги отсутствуют');
+        }
     }
 
     /**
@@ -276,26 +222,22 @@ class MShell
      */
     private function setValue ($key, $value, $expires)
     {
-        try 
+        if ($key)
         {
-            if ($key)
+            $value = array('data' => $value, 'ttl' => time() + $expires);
+            if ($this->mc->set($key, json_encode($value, JSON_UNESCAPED_UNICODE), 0, $this->ttl))
             {
-                if ($value)
-                {
-                    $value = array('data' => $value, 'ttl' => time() + $expires);
-                    if (!$this->mc->set($key, json_encode($value, JSON_UNESCAPED_UNICODE), 0, $this->ttl))
-                        throw new MShellException('Не удалось сохранит значение');
-                }
+                return true;
             }
             else
             {
-                throw new MShellException('Значение не сохранено. Отсутствует ключ');
+                throw new MShellException('Не удалось сохранит значение');
             }
         }
-        catch (MShellException $e)
+        else
         {
-			throw $e;
-		}
+            throw new MShellException('Значение не сохранено. Отсутствует ключ');
+        }
     }
 
     /**
@@ -308,14 +250,7 @@ class MShell
      */
     public function saveHTML($html, $url, $expire)
     {
-        try
-        {
-            $this->mc->set($url, $html, 0, $expire);
-        }
-        catch (Exception $e)
-        {
-            throw $e;
-        }
+        return $this->mc->set(md5($url), $html, 0, $expire);
     }
 
     /**
@@ -326,14 +261,12 @@ class MShell
      */
     public function getHTML ($url)
     {
-        try
-        {
-            $this->mc->get($url);
-        }
-        catch (Exception $e)
-        {
-            throw $e;
-        }
+        return $this->mc->get(md5($url));
+    }
+
+    public function delHTML ($url)
+    {
+        return $this->mc->delete(md5($url));
     }
 
 }
