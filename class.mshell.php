@@ -27,16 +27,30 @@ class MShell
      * @return bool|MShell
      * @throws MShellException
      */
-    public static function create ($hostorsock = MEMCACHED_SOCKET, $port = MEMCACHED_PORT, $ttl = MEMCACHED_TTL, $tag_ttl = MEMCACHED_TAG_TTL, $delay = MEMCACHED_DELAY, $solt = MEMCACHED_SOLT)
+    public static function create ($cache_type = MSHELL_CACHE_TYPE,
+                                   $connect_type = MSHELL_CONNECT_TYPE,
+                                   $hostorsock = MSHELL_SOCKET,
+                                   $port = MSHELL_PORT,
+                                   $ttl = MSHELL_TTL,
+                                   $tag_ttl = MSHELL_TAG_TTL,
+                                   $delay = MSHELL_DELAY,
+                                   $solt = MSHELL_SOLT)
     {
         if (!self::$instance)
         {
             $dbconnect = _PDO::create();
 
-            $mc = new Memcache;
-            if ($connect = $mc->connect($hostorsock, $port))
+            if ($cache_type == 'mamcache')
             {
-                self::$instance = new MShell ($mc, $ttl, $tag_ttl, $lock_value = MEMCACHED_LOCK_VALUE, $delay, $solt, $dbconnect);
+                $cache = new Memcache;
+            }
+            elseif ($cache_type == 'redis')
+            {
+                $cache = new Redis;
+            }
+            if ($connect = $cache->$connect_type($hostorsock, $port))
+            {
+                self::$instance = new MShell ($cache, $ttl, $tag_ttl, $lock_value = MEMCACHED_LOCK_VALUE, $delay, $solt, $dbconnect);
             }
             else
             {
@@ -46,12 +60,19 @@ class MShell
         return self::$instance;
     }
 
+    /**
+     * Получить уже созданный экземпляр класса
+     *
+     * @return bool
+     */
     public static function getInstance ()
     {
         return self::$instance;
     }
 
     /**
+     * Конструктор класса
+     *
      * @param $mc - объект подключения к memcached
      * @param $ttl - время актуальности элемента кэша
      * @param $tag_ttl - время актуальности тега
@@ -162,7 +183,7 @@ class MShell
                             {
                                 goto get;
                             }
-                            elseif ($tags = $this->dbconnect->getTables($query))
+                            elseif ($tags = $this->dbconnect->getEditTables($query))
                             {
                                 foreach ($tags AS $tag)
                                 {
@@ -283,7 +304,7 @@ class MShell
      * Удалить страницу из кэша
      *
      * @param $url - адрес удаляемой страницы
-     * 
+     *
      * @return mixed
      */
     public function delHTML ($url)
