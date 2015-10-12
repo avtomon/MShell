@@ -8,14 +8,14 @@
 
 #####create
 
-    public static function create ($cache\_type = *MSHELL\_CACHE\_TYPE*,
-                                   $connect\_type = *MSHELL\_CONNECT\_TYPE*,
-                                   $hostorsock = *MSHELL\_SOCKET*,
-                                   $port = *MSHELL\_PORT*,
-                                   $ttl = *MSHELL\_TTL*,
-                                   $tag\_ttl = *MSHELL\_TAG\_TTL*,
-                                   $delay = *MSHELL\_DELAY*,
-                                   $solt = *MSHELL\_SOLT*)
+    public static function create ($cache_type = *MSHELL_CACHE_TYPE*,
+                                   $connect_type = *MSHELL_CONNECT_TYPE*,
+                                   $hostorsock = *MSHELL_SOCKET*,
+                                   $port = *MSHELL_PORT*,
+                                   $ttl = *MSHELL_TTL*,
+                                   $tag_ttl = *MSHELL_TAG_TTL*,
+                                   $delay = *MSHELL_DELAY*,
+                                   $solt = *MSHELL_SOLT*)
 
 **Описание:**
 
@@ -31,7 +31,7 @@
 
 -   *$ttl* - время жизни элемента кэша;
 
--   *$tag\_ttl* - время жизни тега сброса для кэша;
+-   *$tag_ttl* - время жизни тега сброса для кэша;
 
 -   *$delay* - задержка между двумя последовательными запросами на получение блокировки на запись в кэш;
 
@@ -54,7 +54,7 @@
 
 **Пример использования:**
 
-    $current\_cache = $c->getInstance
+    $current_cache = $c->getInstance
 
 <br>
 #####getKey
@@ -196,7 +196,7 @@
 
 **Пример использования:**
 
-    $cache->saveHTML($html, $\_REQUEST\['page'\], $source\['expire'\]);
+    $cache->saveHTML($html, $_REQUEST['page'], $source['expire']);
 
 <br>
 #####getHTML
@@ -213,7 +213,7 @@
 
 **Пример использования:**
 
-    $html = $cache->getHTML($\_REQUEST\['page'\]);
+    $html = $cache->getHTML($_REQUEST['page']);
 
 <br>
 #####delHTML
@@ -230,7 +230,7 @@
 
 **Пример использования:**
 
-    $cache->delHTML($page\_url);
+    $cache->delHTML($page_url);
 
 <br>
 ***
