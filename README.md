@@ -1,3 +1,5 @@
+#MShell
+
 Класс Mshell предназначен для кэширования результатов запросов к базам данных и HTML-разметки сгенерированных страниц. В качесве кэширующего сервера может использоваться Memcached или Redis. Для работы требуется класс \_PDO ([*https://github.com/avtomon/\_PDO*](https://github.com/avtomon/_PDO)), расширение PHP Memcache или Redis, а так же доступ к соответствующему серверу.
 
 ##Описание методов
@@ -52,7 +54,7 @@
 
 **Пример использования:**
 
-    $current\_cache = $c-&gt;getInstance
+    $current\_cache = $c->getInstance
 
 <br>
 #####getKey
@@ -69,7 +71,7 @@
 
 **Пример использования:**
 
-    $key = $this-&gt;getKey($query . *serialize*($params));
+    $key = $this->getKey($query . *serialize*($params));
 
 <br>
 #####beginTransaction
@@ -84,7 +86,7 @@
 
 **Пример использования:**
 
-    $cache-&gt;beginTransaction();
+    $cache->beginTransaction();
 
 <br>
 #####commit
@@ -99,12 +101,12 @@
 
 **Пример использования:**
 
-    $cache-&gt;commit();
+    $cache->commit();
 
 <br>
 #####rollBack
 
- public function rollBack ()
+    public function rollBack ()
 
 **Описание:**
 
@@ -114,7 +116,7 @@
 
 **Пример использования:**
 
-    $cache-&gt;rollBack();
+    $cache->rollBack();
 
 <br>
 #####getValue
@@ -135,7 +137,7 @@
 
 **Пример использования:**
 
-    $result = $cache-&gt;getValue($sql, $data, 0);
+    $result = $cache->getValue($sql, $data, 0);
 
 <br>
 #####initTags
@@ -152,7 +154,7 @@
 
 **Пример использования:**
 
-    $this-&gt;initTags($tags);
+    $this->initTags($tags);
 
 <br>
 #####setValue
@@ -173,7 +175,7 @@
 
 **Пример использования:**
 
-    $this-&gt;setValue($key, $value, $expires);
+    $this->setValue($key, $value, $expires);
 
 <br>
 #####saveHTML
@@ -194,7 +196,7 @@
 
 **Пример использования:**
 
-    $cache-&gt;saveHTML($html, $\_REQUEST\['page'\], $source\['expire'\]);
+    $cache->saveHTML($html, $\_REQUEST\['page'\], $source\['expire'\]);
 
 <br>
 #####getHTML
@@ -211,7 +213,7 @@
 
 **Пример использования:**
 
-    $html = $cache-&gt;getHTML($\_REQUEST\['page'\]);
+    $html = $cache->getHTML($\_REQUEST\['page'\]);
 
 <br>
 #####delHTML
@@ -228,7 +230,7 @@
 
 **Пример использования:**
 
-    $cache-&gt;delHTML($page\_url);
+    $cache->delHTML($page\_url);
 
 <br>
 ***
