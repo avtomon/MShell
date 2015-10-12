@@ -59,7 +59,7 @@
 <br>
 #####getKey
 
- private function getKey ($query)
+    private function getKey ($query)
 
 **Описание:**
 
