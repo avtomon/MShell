@@ -71,7 +71,7 @@
 
 **Пример использования:**
 
-    $key = $this->getKey($query . *serialize*($params));
+    $key = $this->getKey($query . serialize($params));
 
 <br>
 #####beginTransaction
