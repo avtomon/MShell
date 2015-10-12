@@ -8,14 +8,14 @@
 
 #####create
 
-    public static function create ($cache_type = *MSHELL_CACHE_TYPE*,
-                                   $connect_type = *MSHELL_CONNECT_TYPE*,
-                                   $hostorsock = *MSHELL_SOCKET*,
-                                   $port = *MSHELL_PORT*,
-                                   $ttl = *MSHELL_TTL*,
-                                   $tag_ttl = *MSHELL_TAG_TTL*,
-                                   $delay = *MSHELL_DELAY*,
-                                   $solt = *MSHELL_SOLT*)
+    public static function create ($cache_type = MSHELL_CACHE_TYPE,
+                                   $connect_type = MSHELL_CONNECT_TYPE,
+                                   $hostorsock = MSHELL_SOCKET,
+                                   $port = MSHELL_PORT,
+                                   $ttl = MSHELL_TTL,
+                                   $tag_ttl = MSHELL_TAG_TTL,
+                                   $delay = MSHELL_DELAY,
+                                   $solt = MSHELL_SOLT)
 
 **Описание:**
 
