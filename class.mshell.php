@@ -27,30 +27,32 @@ class MShell
      * @return bool|MShell
      * @throws MShellException
      */
-    public static function create ($cache_type = MSHELL_CACHE_TYPE,
-                                   $connect_type = MSHELL_CONNECT_TYPE,
-                                   $hostorsock = MSHELL_SOCKET,
-                                   $port = MSHELL_PORT,
-                                   $ttl = MSHELL_TTL,
-                                   $tag_ttl = MSHELL_TAG_TTL,
-                                   $delay = MSHELL_DELAY,
-                                   $solt = MSHELL_SOLT)
+    public static function create (string $cache_type = MSHELL_CACHE_TYPE,
+                                   string $connect_type = MSHELL_CONNECT_TYPE,
+                                   string $hostorsock = MSHELL_SOCKET,
+                                   int $port = MSHELL_PORT,
+                                   int $ttl = MSHELL_TTL,
+                                   int $tag_ttl = MSHELL_TAG_TTL,
+                                   int $delay = MSHELL_DELAY,
+                                   string $solt = MSHELL_SOLT)
     {
         if (!self::$instance)
         {
             $dbconnect = _PDO::create();
 
-            if ($cache_type == 'mamcache')
+            if ($cache_type == 'memcached')
             {
-                $cache = new Memcache;
+                $cache = new Memcached;
+                $connect = $cache->addServer($hostorsock, $port);
             }
             elseif ($cache_type == 'redis')
             {
                 $cache = new Redis;
+                $connect = $cache->$connect_type($hostorsock, $port);
             }
-            if ($connect = $cache->$connect_type($hostorsock, $port))
+            if ($connect)
             {
-                self::$instance = new MShell ($cache, $ttl, $tag_ttl, $lock_value = MEMCACHED_LOCK_VALUE, $delay, $solt, $dbconnect);
+                self::$instance = new MShell ($cache, $ttl, $tag_ttl, $delay, $solt, $dbconnect);
             }
             else
             {
@@ -76,26 +78,31 @@ class MShell
      * @param $mc - объект подключения к memcached
      * @param $ttl - время актуальности элемента кэша
      * @param $tag_ttl - время актуальности тега
-     * @param $lock_value - значение для блокировки элемента кэша
      * @param $delay - задержка между двумя последовательными запросами блокировки элемента кэша
      * @param $solt - соль для генерации ключа элемента
      * @param $dbconnect - объект подключения к БД
      */
-    private function __construct (&$mc, &$ttl, &$tag_ttl, $lock_value, &$delay, &$solt, &$dbconnect)
+    private function __construct (Memcached & $mc, int & $ttl, int & $tag_ttl, int & $delay, string & $solt, _PDO & $dbconnect)
     {
         $this->dbconnect = $dbconnect;
         $this->mc = $mc;
         $this->ttl = $ttl;
         $this->tag_ttl = $tag_ttl;
-        $this->lock_value = $lock_value;
-		$this->delay = $delay;
+        $this->lock_value = MSHELL_LOCK_VALUE;
+        $this->delay = $delay;
         $this->solt = $solt;
         $this->dbconnect = $dbconnect;      
     }
 
+    /**
+     * Деструктор класса
+     */
     public function __destruct ()
     {
-        return $this->mc->close();
+        if (get_class($this->mc) === 'Redis')
+            return $this->mc->close();
+        else
+            return $this->mc->quit();
     }
 
     /**
@@ -106,7 +113,7 @@ class MShell
      * @return string
      * @throws Exception
      */
-    private function getKey ($query)
+    private function getKey (string $query)
     {
         if ($query)
         {
@@ -158,7 +165,7 @@ class MShell
      * @return mixed
      * @throws Exception
      */
-    public function getValue ($query, array $params = array(), $expires = 120)
+    public function getValue (string $query, array $params = [], int $expires = 120)
     {
         $tags = $this->dbconnect->getEditTables($query);
         if ($tags)
@@ -183,15 +190,16 @@ class MShell
                             {
                                 goto get;
                             }
-                            elseif ($tags = $this->dbconnect->getEditTables($query))
+                            elseif ($tags = $this->dbconnect->getTables($query))
                             {
-                                foreach ($tags AS $tag)
+                                foreach ($tags as & $tag)
                                 {
                                     if ($this->mc->get($tag) >= $value['ttl'] - $expires)
                                     {
                                         goto get;
                                     }
                                 }
+                                unset($tag);
                                 return $value['data'];
                             }
                             else
@@ -227,15 +235,16 @@ class MShell
      * @throws MShellException
      * @throws Exception
      */
-    private  function initTags (array $tags = array())
+    private  function initTags (array & $tags = [])
     {
         if ($tags)
         {
-            foreach ($tags AS $tag)
+            foreach ($tags as & $tag)
             {
-                if (!$this->mc->set($tag, time(), 0, $this->tag_ttl))
+                if (!$this->mc->set($tag, time(), $this->tag_ttl))
                     throw new MShellException('Не удалось установить значение тега');
             }
+            unset($tag);
             return true;
         }
         else
@@ -254,7 +263,7 @@ class MShell
      * @return bool
      * @throws MShellException
      */
-    private function setValue ($key, $value, $expires)
+    private function setValue (string & $key, & $value, int & $expires)
     {
         if ($key)
         {
@@ -281,11 +290,11 @@ class MShell
      * @param $url - адрес страницы
      * @param $expire - на сколько сохранять
      *
-     * @throws Exception
+     * @return bool
      */
-    public function saveHTML($html, $url, $expire)
+    public function saveHTML(string & $html, string $url, int $expire)
     {
-        return $this->mc->set(md5($url), $html, 0, $expire);
+        return $this->mc->set(md5($url), $html, $expire);
     }
 
     /**
@@ -293,9 +302,9 @@ class MShell
      *
      * @param $url - адрес запрашиваемой страницы
      *
-     * @throws Exception
+     * * @return bool
      */
-    public function getHTML ($url)
+    public function getHTML (string $url)
     {
         return $this->mc->get(md5($url));
     }
@@ -307,9 +316,21 @@ class MShell
      *
      * @return mixed
      */
-    public function delHTML ($url)
+    public function delHTML (string $url)
     {
         return $this->mc->delete(md5($url));
+    }
+
+    /**
+     * Удалить страницы из кэша
+     *
+     * @param array $urls - адрес удаляемых страниц
+     *
+     * @return bool
+     */
+    public function delHTMLs (array $urls)
+    {
+        return $this->mc->deleteMulti($urls);
     }
 
 }
