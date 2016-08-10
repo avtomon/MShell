@@ -263,7 +263,7 @@ class MShell
      * @return bool
      * @throws MShellException
      */
-    private function setValue (string & $key, & $value, int & $expires)
+    private function setValue (string & $key, $value, int & $expires)
     {
         if ($key)
         {
