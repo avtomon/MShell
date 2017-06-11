@@ -40,6 +40,7 @@ class MShell
         {
             $dbconnect = _PDO::create();
 
+            $connect = $cache = null;
             if ($cache_type == 'memcached')
             {
                 $cache = new Memcached;
@@ -268,13 +269,13 @@ class MShell
         if ($key)
         {
             $value = array('data' => $value, 'ttl' => time() + $expires);
-            if ($this->mc->set($key, json_encode($value, JSON_UNESCAPED_UNICODE), 0, $this->ttl))
+            if ($this->mc->set($key, json_encode($value, JSON_UNESCAPED_UNICODE), $this->ttl))
             {
                 return true;
             }
             else
             {
-                throw new MShellException('Не удалось сохранит значение');
+                throw new MShellException('Не удалось сохранить значение');
             }
         }
         else
