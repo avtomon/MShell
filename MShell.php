@@ -6,13 +6,15 @@ class MShellException extends Exception
 
 class MShell
 {
-    private $dbconnect; // Время жизни элемента кэша
-    private $ttl; // Время жизни тега
-    private $tagTtl; // Значение заблокированного элемента кэша
-    private $lockValue; // Задержка между последовательными попытками записи в кэш
-    private $delay; // Соль, использующаяся при формировании имени ключа элемента кэша
-    private $solt; // Подключение к Memcached
-    private $mc;
+    private $dbconnect; // Подключение к БД
+    private $ttl; // Время жизни элемента кэша
+    private $tagTtl; // Время жизни тега
+    private $lockValue; // Значение заблокированного элемента кэша
+    private $delay; // Задержка между последовательными попытками записи в кэш
+    private $solt; // Соль, использующаяся при формировании имени ключа элемента кэша
+    private $tryCount; // Колчичество попыток получение кэша
+    private $lockTtl; // Время жизни блокировки
+    private $mc; // Подключение к Memcached
 
     /**
      * MShell constructor.
@@ -30,16 +32,18 @@ class MShell
      * @throws MShellException
      */
     public function __construct(
-            _PDO $dbconnect,
-            string $cacheType,
-            string $connectType,
-            string $hostOrSock,
-            int $port,
-            int $ttl,
-            int $tagTtl,
-            int $delay,
-            string $solt,
-            string $lockValue
+        _PDO $dbconnect,
+        string $cacheType,
+        string $connectType,
+        string $hostOrSock,
+        int $port,
+        int $ttl,
+        int $tagTtl,
+        int $delay,
+        string $solt,
+        string $lockValue,
+        int $tryCount,
+        int $lockTtl
     ) {
         $connect = NULL;
         if ($cacheType == 'memcached') {
@@ -60,6 +64,8 @@ class MShell
         $this->lockValue = $lockValue;
         $this->delay = $delay;
         $this->solt = $solt;
+        $this->tryCount = $tryCount;
+        $this->lockTtl = $lockTtl;
     }
     
     public function __destruct()
@@ -69,6 +75,19 @@ class MShell
         } else {
             $this->mc->quit();
         }
+    }
+
+    private function getTagsTimes(string $query, array $value) {
+        $tags = filter_var($query, FILTER_VALIDATE_URL) ? ($value['tags'] ?? []) : $this->dbconnect->getTables($query);
+        $tagsTimes = array_map(function ($tag) {
+            return $this->mc->get($tag);
+        }, $tags);
+
+        if (!$tagsTimes) {
+            throw new MShellException('Список тегов пуст');
+        }
+
+        return $tagsTimes;
     }
 
     /**
@@ -81,47 +100,44 @@ class MShell
      * @return mixed
      * @throws MShellException
      */
-    public function getValue(string $query, array $params = [], int $expires = 120)
+    public function getValue(string $query, array $params = [])
     {
         $tags = $this->dbconnect->getEditTables($query);
         if ($tags) {
             $this->initTags($tags);
             return $this->dbconnect->query($query, $params);
-        } else {
-            if ($expires) {
-                $key = $this->getKey($query . serialize($params));
-                for ($i = 0; $i < 20; $i++) {
-                    $value = $this->mc->get($key);
-                    if ($value) {
-                        if ($value !== $this->lockValue) {
-                            $value = json_decode($value, true);
-                            if (!isset($value['ttl']) || $value['ttl'] < time()) {
-                                goto get;
-                            } elseif ($tags = $this->dbconnect->getTables($query)) {
-                                foreach ($tags as & $tag) {
-                                    if ($this->mc->get($tag) >= $value['ttl'] - $expires) {
-                                        goto get;
-                                    }
-                                }
-                                unset($tag);
-                                return $value['data'];
-                            } else {
-                                throw new MShellException('Список таблиц запроса на выборку пуст');
-                            }
-                        } else {
-                            usleep($this->delay);
-                        }
-                    } else {
-                        get:
-                        $value = $this->dbconnect->query($query, $params);
-                        $this->setValue($key, $value, $expires);
-                        return $value;
-                    }
-                }
-                throw new MShellException('Не удалось установить блокировку');
-            }
+        }
+
+        if (!$expires) {
             return $this->dbconnect->query($query, $params);
         }
+
+        $key = $this->getKey($query . serialize($params));
+        for ($i = 0; $i < $this->tryCount; $i++) {
+            $value = $this->mc->get($key);
+            if ($value === $this->lockValue) {
+                usleep($this->delay);
+                continue;
+            }
+
+            $tagsTimes = $this->getTagsTimes($query, $value);
+
+            $value = json_decode($value, true);
+            if (!$value || (!isset($value['time']) || $value['time'] < time()) || max(array_merge($tagsTimes, $value['time'])) !== $value['time']) {
+                if (filter_var($query, FILTER_VALIDATE_URL)) {
+                    return '';
+                }
+
+                $this->mc->set($key, $this->lockValue, $this->lockTtl);
+                $value = $this->dbconnect->query($query, $params);
+                $this->setValue($key, $value, $expires);
+                return $value;
+            }
+
+            return $value['data'];
+        }
+        throw new MShellException('Не удалось установить блокировку');
+
     }
 
     /**
@@ -134,17 +150,18 @@ class MShell
      */
     private function initTags(array & $tags = [])
     {
-        if ($tags) {
-            foreach ($tags as & $tag) {
-                if (!$this->mc->set($tag, time(), $this->tagTtl)) {
-                    throw new MShellException('Не удалось установить значение тега');
-                }
-            }
-            unset($tag);
-            return true;
-        } else {
+        if (!$tags) {
             throw new MShellException('Теги отсутствуют');
         }
+
+        foreach ($tags as & $tag) {
+            if (!$this->mc->set($tag, time(), $this->tagTtl)) {
+                throw new MShellException('Не удалось установить значение тега');
+            }
+        }
+        unset($tag);
+
+        return true;
     }
 
     /**
@@ -157,11 +174,11 @@ class MShell
      */
     private function getKey(string $query)
     {
-        if ($query) {
-            return md5($query . $this->solt);
-        } else {
+        if (!$query) {
             throw new MShellException('Строка запроса пуста');
         }
+
+        return md5($query . $this->solt);
     }
 
     /**
@@ -174,18 +191,22 @@ class MShell
      * @return bool
      * @throws MShellException
      */
-    private function setValue(string & $key, $value, int & $expires)
+    private function setValue(string & $key, $value, array $tags = [])
     {
-        if ($key) {
-            $value = array('data' => $value, 'ttl' => time() + $expires);
-            if ($this->mc->set($key, json_encode($value, JSON_UNESCAPED_UNICODE), $this->ttl)) {
-                return true;
-            } else {
-                throw new MShellException('Не удалось сохранит значение');
-            }
-        } else {
+        if (!$key) {
             throw new MShellException('Значение не сохранено. Отсутствует ключ');
         }
+
+        $value = ['data' => $value, 'time' => time()];
+        if ($tags) {
+            $value['tags'] = $tags;
+        }
+        if (!$this->mc->set($key, json_encode($value, JSON_UNESCAPED_UNICODE), $this->ttl)) {
+            throw new MShellException('Не удалось сохранит значение');
+
+        }
+
+        return true;
     }
 
     /**
@@ -197,9 +218,21 @@ class MShell
      *
      * @return bool
      */
-    public function saveHTML(string & $html, string $url, int $expire)
+    public function saveHTML(string & $html, string $url, array $params = [], int $expire = null, array $tags = [])
     {
-        return $this->mc->set(md5($url), $html, $expire);
+        if (!$html) {
+            throw new MShellException('Не передан HTML');
+        }
+
+        if (!$url || !filter_var($query, FILTER_VALIDATE_URL)) {
+            throw new MShellException('Не передан верный URL');
+        }
+
+        if (is_null($expire)) {
+            $expire = $this->ttl;
+        }
+
+        return $this->mc->setValue($this->getKey($url . serialize($params)), $html, $expire, $tags);
     }
 
     /**
@@ -209,9 +242,9 @@ class MShell
      *
      * * @return bool
      */
-    public function getHTML(string $url)
+    public function getHTML(string $url, array $params)
     {
-        return $this->mc->get(md5($url));
+        return $this->getValue($url, $params);
     }
 
     /**
@@ -221,9 +254,9 @@ class MShell
      *
      * @return mixed
      */
-    public function delHTML(string $url)
+    public function delHTML(string $url, array $params)
     {
-        $this->mc->delete(md5($url));
+        $this->mc->delete($this->getKey($url . serialize($params)));
     }
 
     /**
@@ -233,12 +266,16 @@ class MShell
      *
      * @return bool
      */
-    public function delHTMLs(array $urls)
+    public function delHTMLs(array $urls, array $params = [])
     {
+        $keys = array_map(function ($url, $params) {
+            return $this->getKey($url . serialize($params));
+        }, $urls, $params);
+
         if (get_class($this->mc) === 'Redis') {
-            $this->mc->hSet(...$urls);
+            $this->mc->hSet(...$keys);
         } else {
-            $this->mc->deleteMulti($urls);
+            $this->mc->deleteMulti($keys);
         }
     }
 
