@@ -1,10 +1,4 @@
 <?php
-/**
- * Created by PhpStorm.
- * User: Александр
- * Date: 12.10.2015
- * Time: 16:00
- */
 
 const MSHELL_CACHE_TYPE = 'memcache';
 const MSHELL_CONNECT_TYPE = 'pconnect';
