@@ -1,4 +1,6 @@
-﻿<?php
+<?php
+
+namespace avtomon;
 
 class MShellException extends Exception
 {
@@ -47,10 +49,10 @@ class MShell
     ) {
         $connect = NULL;
         if ($cacheType == 'memcached') {
-            $this->mc = new Memcached;
+            $this->mc = new \Memcached;
             $connect = $this->mc->addServer($hostOrSock, $port);
         } elseif ($cacheType == 'redis') {
-            $this->mc = new Redis;
+            $this->mc = new \Redis;
             $connect = $this->mc->$connectType($hostOrSock, $port);
         }
 
@@ -278,5 +280,4 @@ class MShell
             $this->mc->deleteMulti($keys);
         }
     }
-
 }
