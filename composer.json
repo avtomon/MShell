@@ -4,15 +4,20 @@
     "type": "project",
     "minimum-stability": "dev",
     "config": {
-	"process-timeout": 1800
+        "process-timeout": 1800
+    },
+    "autoload": {
+        "psr-4": {
+            "avtomon\\": "src/"
+        }
     },
     "require": {
-	"avtomon/_PDO": "*"
+	    "avtomon/_PDO": "*"
     },
     "repositories": [
 	{
-    	    "type": "git",
-	    "url": "https://github.com/avtomon/_PDO.git"
+      "type": "git",
+      "url": "https://github.com/avtomon/_PDO.git"
 	}
     ]
 }
