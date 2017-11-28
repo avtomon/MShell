@@ -203,7 +203,7 @@ class MShell
         if ($tags) {
             $value['tags'] = $tags;
         }
-        if (!$this->mc->set($key, json_encode($value, JSON_UNESCAPED_UNICODE), $this->ttl)) {
+        if (empty($this->mc->set($key, json_encode($value, JSON_UNESCAPED_UNICODE), $this->ttl))) {
             throw new MShellException('Не удалось сохранить значение');
 
         }
@@ -244,7 +244,7 @@ class MShell
      */
     public function getHTML(string $url, array &$params): string
     {
-        if (!($html = $this->getValue($url, $params))) {
+        if (empty($html = $this->getValue($url, $params))) {
             return '';
         }
 
