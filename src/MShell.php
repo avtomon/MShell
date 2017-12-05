@@ -125,18 +125,19 @@ class MShell
             $value = json_decode($value, true);
             $tagsTimes = $this->getTagsTimes($query, $value ? $value : []);
 
-            if (!$value || (empty($value['time']) || $value['time'] < time()) || max(array_merge($tagsTimes, $value['time'])) !== $value['time']) {
-                if (filter_var($query, FILTER_VALIDATE_URL)) {
-                    return '';
-                }
-
-                $this->mc->set($key, $this->lockValue, $this->lockTtl);
-                $value = $this->dbconnect->query($query, $params);
-                $this->setValue($key, $value, $this->dbconnect->getTables($query));
-                return $value;
+            if ($value && !empty($value['time']) && $value['time'] >= time() && min(array_merge($tagsTimes, $value['time'])) === $value['time']) {
+                return $value['data'];
             }
 
-            return $value['data'];
+            if (filter_var($query, FILTER_VALIDATE_URL)) {
+                return '';
+            }
+
+            $this->mc->set($key, $this->lockValue, $this->lockTtl);
+            $value = $this->dbconnect->query($query, $params);
+            $this->setValue($key, $value, $this->dbconnect->getTables($query));
+
+            return $value;
         }
 
         throw new MShellException('Не удалось установить блокировку');
@@ -161,6 +162,7 @@ class MShell
                 throw new MShellException('Не удалось установить значение тега');
             }
         }
+
         unset($tag);
 
         return true;
@@ -203,6 +205,7 @@ class MShell
         if ($tags) {
             $value['tags'] = $tags;
         }
+
         if (empty($this->mc->set($key, json_encode($value, JSON_UNESCAPED_UNICODE), $this->ttl))) {
             throw new MShellException('Не удалось сохранить значение');
 
@@ -244,23 +247,7 @@ class MShell
      */
     public function getHTML(string $url, array &$params): string
     {
-        if (empty($html = $this->getValue($url, $params))) {
-            return '';
-        }
-
-        $tagsTimes = $this->getTagsTimes($query, $value ? $value : []);
-
-        $value = json_decode($value, true);
-        if (!$value || (empty($value['time']) || $value['time'] < time()) || max(array_merge($tagsTimes, $value['time'])) !== $value['time']) {
-            if (filter_var($query, FILTER_VALIDATE_URL)) {
-                return '';
-            }
-
-            $this->mc->set($key, $this->lockValue, $this->lockTtl);
-            $value = $this->dbconnect->query($query, $params);
-            $this->setValue($key, $value, $this->dbconnect->getTables($query));
-            return $value;
-        }
+        return $this->getValue($url, $params);
     }
 
     /**
