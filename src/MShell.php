@@ -20,6 +20,7 @@ class MShell
 
     /**
      * MShell constructor.
+     *
      * @param _PDO $dbconnect
      * @param string $cacheType
      * @param string $connectType
@@ -30,6 +31,8 @@ class MShell
      * @param int $delay
      * @param string $solt
      * @param string $lockValue
+     * @param int $tryCount
+     * @param int $lockTtl
      *
      * @throws MShellException
      */
@@ -52,8 +55,14 @@ class MShell
             $this->mc = new \Memcached;
             $connect = $this->mc->addServer($hostOrSock, $port);
         } elseif ($cacheType == 'redis') {
+            if (!in_array($connectType, ['connect', 'pconnect'])) {
+                throw new MShellException('Тип подключения должен быть pconnect или connect');
+            }
+
             $this->mc = new \Redis;
             $connect = $this->mc->$connectType($hostOrSock, $port);
+        } else {
+            throw new MShellException("Кэшировать можно только с использованием Memcached и Redis. Вы пытаетесь использовать $cacheType");
         }
 
         if (!$connect) {
@@ -104,6 +113,7 @@ class MShell
      * @param array $params - параментры запроса
      *
      * @return mixed
+     *
      * @throws MShellException
      */
     public function getValue(string $query, array $params = [])
