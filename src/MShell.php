@@ -133,7 +133,7 @@ class MShell
             }
 
             $value = json_decode($value, true);
-            $tagsTimes = $this->getTagsTimes($query, $value ? $value : []);
+            $tagsTimes = $this->getTagsTimes($query, $value ?: []);
 
             if ($value && !empty($value['time']) && $value['time'] >= time() && min(array_merge($tagsTimes, $value['time'])) === $value['time']) {
                 return $value['data'];
