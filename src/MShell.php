@@ -8,18 +8,72 @@ class MShellException extends \Exception
 
 class MShell
 {
-    private $dbconnect; // Подключение к РСУБД
-    private $ttl; // Время жизни элемента кэша
-    private $tagTtl; // Время жизни тега
-    private $lockValue; // Значение заблокированного элемента кэша
-    private $delay; // Задержка между последовательными попытками записи в кэш
-    private $solt; // Соль, использующаяся при формировании имени ключа элемента кэша
-    private $tryCount; // Колчичество попыток получение кэша
-    private $lockTtl; // Время жизни блокировки
-    private $mc; // Подключение к Memcached|Redis
 
     /**
-     * MShell constructor.
+     * Объект подключения к базе данных
+     *
+     * @var _PDO
+     */
+    private $dbconnect;
+
+    /**
+     * Время жизни элемента кэша
+     *
+     * @var int
+     */
+    private $ttl;
+
+    /**
+     * Время жизни тега
+     *
+     * @var int
+     */
+    private $tagTtl;
+
+    /**
+     * Значение заблокированного элемента кэша
+     *
+     * @var string
+     */
+    private $lockValue;
+
+    /**
+     * Задержка между последовательными попытками записи в кэш
+     *
+     * @var int
+     */
+    private $delay;
+
+    /**
+     * Соль, использующаяся при формировании имени ключа элемента кэша
+     *
+     * @var string
+     */
+    private $solt;
+
+    /**
+     * Колчичество попыток получение кэша
+     *
+     * @var int
+     */
+    private $tryCount;
+
+    /**
+     * Время жизни блокировки
+     *
+     * @var int
+     */
+    private $lockTtl;
+
+    /**
+     * Подключение к Memcached|Redis
+     *
+     * @var \Redis|\Memcached
+     */
+    private $mc;
+
+    /**
+     * MShell constructor
      *
      * @param _PDO $dbconnect
      * @param string $cacheType
@@ -78,7 +132,10 @@ class MShell
         $this->tryCount = $tryCount;
         $this->lockTtl = $lockTtl;
     }
-    
+
+    /**
+     * Деструктор
+     */
     public function __destruct()
     {
         if (get_class($this->mc) === 'Redis') {
@@ -159,6 +216,7 @@ class MShell
      * @param array $tags - массив тегов
      *
      * @return bool
+     *
      * @throws MShellException
      */
     private function initTags(array & $tags = []): bool
@@ -181,9 +239,10 @@ class MShell
     /**
      * Функция получения ключа элемента кэша
      *
-     * @param $query - текст запроса
+     * @param string $query - текст запроса
      *
      * @return string
+     *
      * @throws Exception
      */
     private function getKey(string $query): string
@@ -203,6 +262,7 @@ class MShell
      * @param array $tags - время актуальности элемента кэша
      *
      * @return bool
+     *
      * @throws MShellException
      */
     private function setValue(string &$key, $value, array $tags = []): bool
@@ -230,7 +290,7 @@ class MShell
      * @param string $url - адрес страницы
      * @param array $params - GET-параметры запроса
      * @param string $html - текст страницы
-     * @param $tags - теги страницы
+     * @param array $tags - теги страницы
      *
      * @return bool
      */
@@ -250,10 +310,12 @@ class MShell
     /**
      * Достать разметку страницы из кэша
      *
-     * @param $url - адрес запрашиваемой страницы
-     * @param
+     * @param string $url - адрес запрашиваемой страницы
+     * @param array $params - параметры страницы
      *
      * @return string
+     *
+     * @throws MShellException
      */
     public function getHTML(string $url, array &$params): string
     {
@@ -264,6 +326,7 @@ class MShell
      * Удалить страницу из кэша
      *
      * @param $url - адрес удаляемой страницы
+     * @param array $params - параметры страницы
      *
      * @return bool
      */
@@ -276,6 +339,7 @@ class MShell
      * Удалить страницы из кэша
      *
      * @param array $urls - адрес удаляемых страниц
+     * @param array $params - параметры страницы
      *
      * @return bool
      */
