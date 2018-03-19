@@ -8,6 +8,7 @@ class MShellException extends \Exception
 
 class MShell
 {
+    const URL_TEMPLATE = '/^.+?\/[^\/]+$/';
 
     /**
      * Объект подключения к базе данных
@@ -77,8 +78,14 @@ class MShell
      *
      * @param _PDO $dbconnect
      * @param string $cacheType
-     * @param string $connectType
-     * @param string $hostOrSock
+     * @param \Memcached|\Redis $connect - подключение к кэшу
+     *
+     * $this->mc = new \Memcached;
+     * $connect = $this->mc->addServer($hostOrSock, $port);
+     * OR
+     * $this->mc = new \Redis;
+     * $connect = $this->mc->$connectType($hostOrSock, $port);
+     *
      * @param int $port
      * @param int $ttl
      * @param int $tagTtl
@@ -92,10 +99,7 @@ class MShell
      */
     public function __construct(
         _PDO $dbconnect,
-        string $cacheType,
-        string $connectType,
-        string $hostOrSock,
-        int $port,
+        $connect,
         int $ttl,
         int $tagTtl,
         int $delay,
@@ -103,24 +107,14 @@ class MShell
         string $lockValue,
         int $tryCount,
         int $lockTtl
-    ) {
-        $connect = NULL;
-        if ($cacheType == 'memcached') {
-            $this->mc = new \Memcached;
-            $connect = $this->mc->addServer($hostOrSock, $port);
-        } elseif ($cacheType == 'redis') {
-            if (!in_array($connectType, ['connect', 'pconnect'])) {
-                throw new MShellException('Тип подключения должен быть pconnect или connect');
-            }
-
-            $this->mc = new \Redis;
-            $connect = $this->mc->$connectType($hostOrSock, $port);
-        } else {
-            throw new MShellException("Кэшировать можно только с использованием Memcached и Redis. Вы пытаетесь использовать $cacheType");
+    )
+    {
+        if (!$connect) {
+            throw new MShellException('Не передано подключение к кэшу');
         }
 
-        if (!$connect) {
-            throw new MShellException('Подключение не удалось');
+        if (!($connect instanceof \Redis) && !($connect instanceof \Memcached)) {
+            throw new MShellException("Кэшировать можно только с использованием Memcached и Redis");
         }
 
         $this->dbconnect = $dbconnect;
@@ -131,6 +125,7 @@ class MShell
         $this->solt = $solt;
         $this->tryCount = $tryCount;
         $this->lockTtl = $lockTtl;
+        $this->mc = $connect;
     }
 
     /**
@@ -155,7 +150,16 @@ class MShell
      */
     private function getTagsTimes(string $query, array $value = []): array
     {
-        $tags = filter_var($query, FILTER_VALIDATE_URL) ? ($value['tags'] ?? []) : $this->dbconnect->getTables($query);
+        if (preg_match(self::URL_TEMPLATE, $query)) {
+            $tags = $value['tags'] ?? [];
+        } else {
+            if (!$this->dbconnect) {
+                throw new MShellException('Отсутствует подключение к базе данных');
+            }
+
+            $tags = $this->dbconnect->getTables($query);
+        }
+
         $tagsTimes = array_map(function ($tag) {
             return $this->mc->get($tag);
         }, $tags);
@@ -175,13 +179,51 @@ class MShell
      */
     public function getValue(string $query, array $params = [])
     {
-        $tags = $this->dbconnect->getEditTables($query);
-        if ($tags) {
-            $this->initTags($tags);
-            return $this->dbconnect->query($query, $params);
+        if ($this->dbconnect) {
+            $tags = $this->dbconnect->getEditTables($query);
+            if ($tags) {
+                $this->initTags($tags);
+                return $this->dbconnect->query($query, $params);
+            }
         }
 
         $key = $this->getKey($query . serialize($params));
+
+        $parseValue = function ($value) use ($query) {
+            if (empty($value)) {
+                return null;
+            }
+
+            if ($value = json_decode($value, true)) {
+                return null;
+            }
+
+            $tagsTimes = $this->getTagsTimes($query, $value ?: []);
+
+            if (!empty($value['time']) && $value['time'] >= time() && min(array_merge($tagsTimes, [$value['time']])) === $value['time']) {
+                return $value['data'];
+            }
+
+            if (preg_match(self::URL_TEMPLATE, $query)) {
+                return '';
+            }
+
+            return null;
+        };
+
+        $save = function () use ($key, $query, $params) {
+            if (!$this->mc->set($key, $this->lockValue, $this->lockTtl)) {
+                return null;
+            }
+
+            $value = $this->dbconnect->query($query, $params);
+            if (!$this->setValue($key, $value, $this->dbconnect->getTables($query))) {
+                throw new MShellException('Не удалось сохранить данные в кэше');
+            }
+
+            return $value;
+        };
+
         for ($i = 0; $i < $this->tryCount; $i++) {
             $value = $this->mc->get($key);
             if ($value === $this->lockValue) {
@@ -189,22 +231,19 @@ class MShell
                 continue;
             }
 
-            $value = json_decode($value, true);
-            $tagsTimes = $this->getTagsTimes($query, $value ?: []);
-
-            if ($value && !empty($value['time']) && $value['time'] >= time() && min(array_merge($tagsTimes, [$value['time']])) === $value['time']) {
-                return $value['data'];
+            if (!$this->dbconnect) {
+                return $parseValue($value);
             }
 
-            if (filter_var($query, FILTER_VALIDATE_URL)) {
-                return '';
+            if ($result = $parseValue($value)) {
+                return $result;
             }
 
-            $this->mc->set($key, $this->lockValue, $this->lockTtl);
-            $value = $this->dbconnect->query($query, $params);
-            $this->setValue($key, $value, $this->dbconnect->getTables($query));
+            if (is_null($result = $save())) {
+                continue;
+            }
 
-            return $value;
+            return $result;
         }
 
         throw new MShellException('Не удалось установить блокировку');
@@ -277,8 +316,7 @@ class MShell
         }
 
         if (empty($this->mc->set($key, json_encode($value, JSON_UNESCAPED_UNICODE), $this->ttl))) {
-            throw new MShellException('Не удалось сохранить значение');
-
+            return false;
         }
 
         return true;
@@ -300,7 +338,7 @@ class MShell
             throw new MShellException('Не передан HTML');
         }
 
-        if (!$url || !filter_var($query, FILTER_VALIDATE_URL)) {
+        if (!$url || !preg_match(self::URL_TEMPLATE, $query)) {
             throw new MShellException('Не передан верный URL');
         }
 
@@ -361,7 +399,7 @@ class MShell
      *
      * @return _PDO
      */
-    public function getDbconnect(): ?_PDO
+    public function getDbConnect(): ?_PDO
     {
         return $this->dbconnect;
     }
