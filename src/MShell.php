@@ -15,63 +15,63 @@ class MShell
      *
      * @var _PDO
      */
-    private $dbconnect;
+    protected $dbconnect;
 
     /**
      * Время жизни элемента кэша
      *
      * @var int
      */
-    private $ttl;
+    protected $ttl;
 
     /**
      * Время жизни тега
      *
      * @var int
      */
-    private $tagTtl;
+    protected $tagTtl;
 
     /**
      * Значение заблокированного элемента кэша
      *
      * @var string
      */
-    private $lockValue;
+    protected $lockValue;
 
     /**
      * Задержка между последовательными попытками записи в кэш
      *
      * @var int
      */
-    private $delay;
+    protected $delay;
 
     /**
      * Соль, использующаяся при формировании имени ключа элемента кэша
      *
      * @var string
      */
-    private $solt;
+    protected $solt;
 
     /**
      * Колчичество попыток получение кэша
      *
      * @var int
      */
-    private $tryCount;
+    protected $tryCount;
 
     /**
      * Время жизни блокировки
      *
      * @var int
      */
-    private $lockTtl;
+    protected $lockTtl;
 
     /**
      * Подключение к Memcached|Redis
      *
      * @var \Redis|\Memcached
      */
-    private $mc;
+    protected $mc;
 
     /**
      * MShell constructor
@@ -148,7 +148,7 @@ class MShell
      *
      * @return array
      */
-    private function getTagsTimes(string $query, array $value = []): array
+    protected function getTagsTimes(string $query, array $value = []): array
     {
         if (preg_match(self::URL_TEMPLATE, $query)) {
             $tags = $value['tags'] ?? [];
@@ -201,6 +201,10 @@ class MShell
             $tagsTimes = $this->getTagsTimes($query, $value ?: []);
 
             if (!empty($value['time']) && $value['time'] >= time() && min(array_merge($tagsTimes, [$value['time']])) === $value['time']) {
+                if (preg_match(self::URL_TEMPLATE, $query)) {
+                    return $value;
+                }
+
                 return $value['data'];
             }
 
@@ -258,7 +262,7 @@ class MShell
      *
      * @throws MShellException
      */
-    private function initTags(array & $tags = []): bool
+    protected function initTags(array & $tags = []): bool
     {
         if (!$tags) {
             throw new MShellException('Теги отсутствуют');
@@ -284,7 +288,7 @@ class MShell
      *
      * @throws Exception
      */
-    private function getKey(string $query): string
+    protected function getKey(string $query): string
     {
         if (!$query) {
             throw new MShellException('Строка запроса пуста');
@@ -304,7 +308,7 @@ class MShell
      *
      * @throws MShellException
      */
-    private function setValue(string &$key, $value, array $tags = []): bool
+    protected function setValue(string &$key, $value, array $tags = []): bool
     {
         if (!$key) {
             throw new MShellException('Значение не сохранено. Отсутствует ключ');
@@ -355,9 +359,13 @@ class MShell
      *
      * @throws MShellException
      */
-    public function getHTML(string $url, array &$params): string
+    public function getHTML(string $url, array &$params, string $checkFile = ''): string
     {
-        return $this->getValue($url, $params);
+        if (!$url || !preg_match(self::URL_TEMPLATE, $query)) {
+            throw new MShellException('Не передан верный URL');
+        }
+
+        $html = $this->getValue($url, $params);
     }
 
     /**
