@@ -1,12 +1,12 @@
-#MShell
+# MShell
 
 Класс Mshell предназначен для кэширования результатов запросов к базам данных и HTML-разметки сгенерированных страниц. В качесве кэширующего сервера может использоваться Memcached или Redis. Для работы требуется класс \_PDO ([*https://github.com/avtomon/\_PDO*](https://github.com/avtomon/_PDO)), расширение PHP Memcache или Redis, а так же доступ к соответствующему серверу.
 
-##Описание методов
+## Описание методов
 
-####Класс class.mshell.php
+#### Класс class.mshell.php
 
-#####create
+##### create
 
     public static function create ($cache_type = MSHELL_CACHE_TYPE,
                                    $connect_type = MSHELL_CONNECT_TYPE,
@@ -42,7 +42,8 @@
     $mc = MShell::create();
 
 <br>
-#####getInstance
+
+##### getInstance
 
     public static function getInstance ()
 
@@ -57,7 +58,8 @@
     $current_cache = $c->getInstance
 
 <br>
-#####getKey
+
+##### getKey
 
     private function getKey ($query)
 
@@ -74,7 +76,8 @@
     $key = $this->getKey($query . serialize($params));
 
 <br>
-#####beginTransaction
+
+##### beginTransaction
 
     public function beginTransaction ()
 
@@ -89,7 +92,8 @@
     $cache->beginTransaction();
 
 <br>
-#####commit
+
+##### commit
 
     public function commit ()
 
@@ -104,7 +108,8 @@
     $cache->commit();
 
 <br>
-#####rollBack
+
+##### rollBack
 
     public function rollBack ()
 
@@ -119,7 +124,8 @@
     $cache->rollBack();
 
 <br>
-#####getValue
+
+##### getValue
 
     public function getValue ($query, array $params = array(), $expires = 120)
 
@@ -140,7 +146,8 @@
     $result = $cache->getValue($sql, $data, 0);
 
 <br>
-#####initTags
+
+##### initTags
 
     private function initTags (array $tags = array())
 
@@ -157,7 +164,8 @@
     $this->initTags($tags);
 
 <br>
-#####setValue
+
+##### setValue
 
     private function setValue ($key, $value, $expires)
 
@@ -178,7 +186,8 @@
     $this->setValue($key, $value, $expires);
 
 <br>
-#####saveHTML
+
+##### saveHTML
 
     public function saveHTML($html, $url, $expire)
 
@@ -199,7 +208,8 @@
     $cache->saveHTML($html, $_REQUEST['page'], $source['expire']);
 
 <br>
-#####getHTML
+
+##### getHTML
 
     public function getHTML ($url)
 
@@ -216,7 +226,8 @@
     $html = $cache->getHTML($_REQUEST['page']);
 
 <br>
-#####delHTML
+
+##### delHTML
 
     public function delHTML ($url)
 
@@ -233,7 +244,8 @@
     $cache->delHTML($page_url);
 
 <br>
-#####delHTMLs
+
+##### delHTMLs
 
     public function delHTML ($url)
 
@@ -250,8 +262,9 @@
     $cache->delHTMLs($urls);
 
 <br>
+
 ***
-##Механика работы
+## Механика работы
 
 На вход модуля поступает запрос на выборку из базы данных или урл страницы, которую нужно достать из кэша.
 Если это запрос на выборку из базы, то модуль ищет соответствующие данные в кэше, если такие данные присутствуют и они актуальны - возвращает их. Если же данные отсутствую или "протухли" системы пытается достать эти данные из базы попутно выставив блокировку на соответствующий ключ, чтобы не возникало состояния гонки в доступе к базе. Результат выборки сохраняется в кэше на время указанное в параметре expire и отдается клиенту. Модуль поддерживает систему тегов. В текущей редакции теги представляют собой список таблиц базы. Если происходит изменение в какой-либо из таблиц, то соответствующий этой таблице тег сбрасывается и все элементы кэша, связанные с этой таблицей, становятся неактуальными. Это сделано для исключения ситуации отдачи из кэша неактуальных данных.

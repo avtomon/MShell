@@ -1,7 +1,6 @@
 {
     "name": "avtomon/MShell",
     "description": "Yet another PHP PDO wrapper",
-    "type": "project",
     "minimum-stability": "dev",
     "config": {
         "process-timeout": 1800
